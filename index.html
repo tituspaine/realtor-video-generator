@@ -276,7 +276,7 @@
         <select id="video-model">
           <option value="Wan-AI/Wan2.2-I2V-A14B">Wan 2.2 — cinema-grade quality</option>
           <option value="Lightricks/LTX-2.5">LTX-2.5 — fast, smooth transitions</option>
-          <option value="tencent/HunyuanVideo">HunyuanVideo — high-fidelity</option>
+          <option value="TencentARC/HunyuanVideo">HunyuanVideo — high-fidelity</option>
         </select>
       </div>
     </div>
@@ -425,7 +425,7 @@ async function handleFiles(files) {
 const MODEL_CONFIG = {
   'Wan-AI/Wan2.2-I2V-A14B': { label: 'Wan 2.2', apiModelId: 'Wan-AI/Wan2.2-I2V-A14B', params: { num_frames: 81, fps: 16 } },
   'Lightricks/LTX-2.5': { label: 'LTX-2.5', apiModelId: 'Lightricks/LTX-2.5', params: { num_frames: 65, fps: 12 } },
-  'tencent/HunyuanVideo': { label: 'HunyuanVideo', apiModelId: 'tencent/HunyuanVideo', params: { num_frames: 65, fps: 12 } }
+  'TencentARC/HunyuanVideo': { label: 'HunyuanVideo', apiModelId: 'TencentARC/HunyuanVideo', params: { num_frames: 65, fps: 12 } }
 };
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -497,11 +497,67 @@ async function parseHuggingFaceResponse(res) {
   throw new Error('Unexpected response format from HuggingFace Inference API.');
 }
 
+function resolvePollUrl(endpoint, res, data) {
+  const location = res.headers.get('location') || res.headers.get('content-location');
+  if (location) {
+    try {
+      return new URL(location, endpoint).toString();
+    } catch {
+      // ignore invalid poll URL and continue searching
+    }
+  }
+  for (const key of ['status_url', 'polling_url', 'job_url']) {
+    if (typeof data?.[key] === 'string' && data[key].trim()) return data[key].trim();
+  }
+  return '';
+}
+
+async function pollHuggingFaceJob(pollUrl, apiKey, maxAttempts = 60) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let res;
+    try {
+      res = await fetch(pollUrl, {
+        headers: {
+          'Authorization': 'Bearer ' + apiKey,
+          'Accept': 'application/json, video/*;q=0.9, */*;q=0.8'
+        }
+      });
+    } catch (err) {
+      if (attempt === maxAttempts) throw new Error(`Polling failed: ${err.message}`);
+      await sleep(1500);
+      continue;
+    }
+
+    if (res.status === 429 || res.status === 503 || res.status === 202) {
+      const body = await res.json().catch(() => ({}));
+      const eta = Number(body.estimated_time);
+      const retryAfter = Number(res.headers.get('retry-after'));
+      const waitSec = Number.isFinite(retryAfter) && retryAfter > 0
+        ? retryAfter
+        : (Number.isFinite(eta) && eta > 0 ? Math.ceil(eta) : 2);
+      log(`⏳ Polling HuggingFace job (${attempt}/${maxAttempts})… waiting ${waitSec}s`);
+      await sleep(waitSec * 1000);
+      continue;
+    }
+
+    if (!res.ok) {
+      const detail = safeErrorDetail(await res.json().catch(() => ({})));
+      throw new Error(`HuggingFace job polling failed (HTTP ${res.status}): ${detail || 'Unknown error'}`);
+    }
+
+    const url = await parseHuggingFaceResponse(res);
+    if (url) return url;
+  }
+
+  throw new Error('HuggingFace job timed out before producing a video.');
+}
+
 async function huggingFaceRun(apiKey, modelId, imageDataUrl, prompt) {
   const cfg = MODEL_CONFIG[modelId] || { params: {}, apiModelId: modelId };
   const payload = {
     inputs: imageDataUrl,
-    parameters: { prompt, ...cfg.params }
+    parameters: { prompt, ...cfg.params },
+    options: { wait_for_model: true, use_cache: false }
   };
 
   const safeModelPath = cfg.apiModelId.split('/').map(encodeURIComponent).join('/');
@@ -509,14 +565,22 @@ async function huggingFaceRun(apiKey, modelId, imageDataUrl, prompt) {
   const maxAttempts = 4;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + apiKey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
+    let res;
+    try {
+      res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + apiKey,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, video/*;q=0.9, */*;q=0.8'
+        },
+        body: JSON.stringify(payload)
+      });
+    } catch (err) {
+      const msg = `Network request to HuggingFace failed for ${cfg.apiModelId} (${endpoint}): ${err.message}`;
+      console.error(msg, err);
+      throw new Error(`${msg}. This is often a CORS/network issue or blocked request.`);
+    }
 
     if (res.status === 429) {
       const detail = safeErrorDetail(await res.json().catch(() => ({})));
@@ -542,8 +606,19 @@ async function huggingFaceRun(apiKey, modelId, imageDataUrl, prompt) {
       continue;
     }
 
+    if (res.status === 202) {
+      const body = await res.json().catch(() => ({}));
+      const pollUrl = resolvePollUrl(endpoint, res, body);
+      if (pollUrl) {
+        log('⏳ HuggingFace accepted the request and returned an async job. Polling for completion…');
+        return pollHuggingFaceJob(pollUrl, apiKey);
+      }
+      throw new Error(`HuggingFace returned async response without a poll URL: ${safeErrorDetail(body) || 'No details provided.'}`);
+    }
+
     if (!res.ok) {
       const detail = safeErrorDetail(await res.json().catch(() => ({})));
+      console.error('HuggingFace API error', { status: res.status, endpoint, modelId: cfg.apiModelId, detail });
       throw new Error(detail || `HuggingFace API request failed (HTTP ${res.status}).`);
     }
 
