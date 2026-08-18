@@ -276,7 +276,7 @@
         <select id="video-model">
           <option value="Wan-AI/Wan2.2-I2V-A14B">Wan 2.2 — cinema-grade quality</option>
           <option value="Lightricks/LTX-2.5">LTX-2.5 — fast, smooth transitions</option>
-          <option value="TencentARC/HunyuanVideo">HunyuanVideo — high-fidelity</option>
+          <option value="tencent/HunyuanVideo">HunyuanVideo — high-fidelity</option>
         </select>
       </div>
     </div>
@@ -423,9 +423,9 @@ async function handleFiles(files) {
 //  HuggingFace Inference API helpers
 // ──────────────────────────────────────────────────────
 const MODEL_CONFIG = {
-  'Wan-AI/Wan2.2-I2V-A14B': { label: 'Wan 2.2', params: { num_frames: 81, fps: 16 } },
-  'Lightricks/LTX-2.5': { label: 'LTX-2.5', params: { num_frames: 65, fps: 12 } },
-  'TencentARC/HunyuanVideo': { label: 'HunyuanVideo', params: { num_frames: 65, fps: 12 } }
+  'Wan-AI/Wan2.2-I2V-A14B': { label: 'Wan 2.2', apiModelId: 'Wan-AI/Wan2.2-I2V-A14B', params: { num_frames: 81, fps: 16 } },
+  'Lightricks/LTX-2.5': { label: 'LTX-2.5', apiModelId: 'Lightricks/LTX-2.5', params: { num_frames: 65, fps: 12 } },
+  'tencent/HunyuanVideo': { label: 'HunyuanVideo', apiModelId: 'tencent/HunyuanVideo', params: { num_frames: 65, fps: 12 } }
 };
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -441,8 +441,8 @@ function maybeBase64VideoToBlobUrl(value) {
   const trimmed = value.trim();
   if (!trimmed) return '';
   if (trimmed.startsWith('data:video/')) return trimmed;
-  if (!/^[A-Za-z0-9+/=\r\n]+$/.test(trimmed)) return '';
   const compact = trimmed.replace(/\s+/g, '');
+  if (!/^[A-Za-z0-9+/=]+$/.test(compact)) return '';
   if (compact.length < 64 || compact.length % 4 !== 0) return '';
   try {
     const bytes = atob(compact);
@@ -498,13 +498,13 @@ async function parseHuggingFaceResponse(res) {
 }
 
 async function huggingFaceRun(apiKey, modelId, imageDataUrl, prompt) {
-  const cfg = MODEL_CONFIG[modelId] || { params: {} };
+  const cfg = MODEL_CONFIG[modelId] || { params: {}, apiModelId: modelId };
   const payload = {
-    inputs: { image: imageDataUrl, prompt },
-    parameters: cfg.params
+    inputs: imageDataUrl,
+    parameters: { prompt, ...cfg.params }
   };
 
-  const safeModelPath = modelId.split('/').map(encodeURIComponent).join('/');
+  const safeModelPath = cfg.apiModelId.split('/').map(encodeURIComponent).join('/');
   const endpoint = `https://api-inference.huggingface.co/models/${safeModelPath}`;
   const maxAttempts = 4;
 
