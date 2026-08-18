@@ -502,7 +502,8 @@ async function huggingFaceRun(apiKey, modelId, imageDataUrl, prompt) {
     parameters: cfg.params
   };
 
-  const endpoint = `https://router.huggingface.co/hf-inference/models/${encodeURIComponent(modelId)}`;
+  const safeModelPath = modelId.split('/').map(encodeURIComponent).join('/');
+  const endpoint = `https://router.huggingface.co/hf-inference/models/${safeModelPath}`;
   const maxAttempts = 4;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -518,7 +519,7 @@ async function huggingFaceRun(apiKey, modelId, imageDataUrl, prompt) {
     if (res.status === 429) {
       const detail = safeErrorDetail(await res.json().catch(() => ({})));
       const retryAfter = parseInt(res.headers.get('retry-after') || '0', 10);
-      const waitSec = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : Math.min(25, 4 * attempt);
+      const waitSec = retryAfter > 0 ? retryAfter : Math.min(25, 4 * attempt);
       if (attempt === maxAttempts) {
         throw new Error(`HuggingFace rate limit reached. ${detail || 'Please wait a moment and try again.'}`);
       }
@@ -554,8 +555,7 @@ async function huggingFaceRun(apiKey, modelId, imageDataUrl, prompt) {
 // ──────────────────────────────────────────────────────
 async function generateVideoForBatch(apiKey, modelId, imageDataUrls, prompt, batchIndex, totalBatches) {
   const modelName = MODEL_CONFIG[modelId]?.label || modelId;
-  log(`Batch ${batchIndex + 1}/${totalBatches}: Using ${modelName} with ${imageDataUrls.length} photo(s) in this batch…`);
-  log(`Batch ${batchIndex + 1}/${totalBatches}: Sending first photo as keyframe to ${modelName}…`);
+  log(`Batch ${batchIndex + 1}/${totalBatches}: Using ${modelName} and sending the first photo as keyframe (${imageDataUrls.length} photo(s) in batch)…`);
   return huggingFaceRun(apiKey, modelId, imageDataUrls[0], prompt);
 }
 
