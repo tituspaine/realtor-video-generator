@@ -524,17 +524,18 @@ async function pollHuggingFaceJob(pollUrl, apiKey, maxAttempts = 60) {
       });
     } catch (err) {
       if (attempt === maxAttempts) throw new Error(`Polling failed: ${err.message}`);
-      await sleep(1500);
+      const waitSec = Math.min(30, 2 ** attempt);
+      await sleep(waitSec * 1000);
       continue;
     }
 
     if (res.status === 429 || res.status === 503 || res.status === 202) {
       const body = await res.json().catch(() => ({}));
       const eta = Number(body.estimated_time);
-      const retryAfter = Number(res.headers.get('retry-after'));
+      const retryAfter = parseInt(res.headers.get('retry-after') || '0', 10);
       const waitSec = Number.isFinite(retryAfter) && retryAfter > 0
         ? retryAfter
-        : (Number.isFinite(eta) && eta > 0 ? Math.ceil(eta) : 2);
+        : (Number.isFinite(eta) && eta > 0 ? Math.ceil(eta) : 10);
       log(`⏳ Polling HuggingFace job (${attempt}/${maxAttempts})… waiting ${waitSec}s`);
       await sleep(waitSec * 1000);
       continue;
