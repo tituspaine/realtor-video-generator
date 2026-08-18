@@ -1,13 +1,598 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Free AI Real Estate Video Generator</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Free AI Real Estate Video Generator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container { max-width: 860px; margin: 0 auto; }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: .5rem;
+      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #94a3b8;
+      margin-bottom: 2rem;
+      font-size: .95rem;
+    }
+
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 1rem;
+      padding: 1.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card h2 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+
+    /* API key */
+    .input-row { display: flex; gap: .75rem; flex-wrap: wrap; }
+    .input-row input {
+      flex: 1;
+      min-width: 0;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: .5rem;
+      padding: .65rem 1rem;
+      color: #e2e8f0;
+      font-size: .9rem;
+    }
+    .input-row input:focus { outline: none; border-color: #38bdf8; }
+
+    /* Upload zone */
+    #drop-zone {
+      border: 2px dashed #334155;
+      border-radius: .75rem;
+      padding: 2.5rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+    }
+    #drop-zone:hover, #drop-zone.drag-over {
+      border-color: #38bdf8;
+      background: rgba(56,189,248,.05);
+    }
+    #drop-zone .icon { font-size: 2.5rem; margin-bottom: .75rem; }
+    #drop-zone p { color: #94a3b8; font-size: .9rem; }
+    #drop-zone strong { color: #e2e8f0; }
+
+    /* Thumbnails */
+    #thumb-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+      gap: .5rem;
+      margin-top: 1rem;
+    }
+    .thumb-wrap { position: relative; aspect-ratio: 1; border-radius: .4rem; overflow: hidden; }
+    .thumb-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .thumb-remove {
+      position: absolute;
+      top: 2px; right: 2px;
+      background: rgba(0,0,0,.65);
+      border: none;
+      border-radius: 50%;
+      width: 20px; height: 20px;
+      color: #fff;
+      font-size: 12px;
+      cursor: pointer;
+      line-height: 20px;
+      text-align: center;
+      padding: 0;
+    }
+    #photo-count { margin-top: .75rem; font-size: .85rem; color: #94a3b8; }
+
+    /* Prompt */
+    textarea {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: .5rem;
+      padding: .75rem 1rem;
+      color: #e2e8f0;
+      font-size: .9rem;
+      resize: vertical;
+      min-height: 90px;
+    }
+    textarea:focus { outline: none; border-color: #38bdf8; }
+
+    /* Options */
+    .options-row { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: .75rem; }
+    .option-group { display: flex; flex-direction: column; gap: .3rem; flex: 1; min-width: 160px; }
+    .option-group label { font-size: .8rem; color: #94a3b8; }
+    select {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: .5rem;
+      padding: .55rem .75rem;
+      color: #e2e8f0;
+      font-size: .9rem;
+    }
+    select:focus { outline: none; border-color: #38bdf8; }
+
+    /* Generate button */
+    #generate-btn {
+      display: block;
+      width: 100%;
+      padding: .9rem;
+      background: linear-gradient(135deg, #0ea5e9, #6366f1);
+      border: none;
+      border-radius: .75rem;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .2s;
+      margin-top: 1.5rem;
+    }
+    #generate-btn:hover:not(:disabled) { opacity: .9; }
+    #generate-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* Progress */
+    #progress-section { display: none; }
+    .progress-bar-bg {
+      background: #0f172a;
+      border-radius: 99px;
+      height: 8px;
+      overflow: hidden;
+      margin: .75rem 0;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #38bdf8, #818cf8);
+      border-radius: 99px;
+      transition: width .4s;
+      width: 0%;
+    }
+    #progress-log {
+      font-size: .8rem;
+      color: #64748b;
+      max-height: 140px;
+      overflow-y: auto;
+      background: #0f172a;
+      border-radius: .5rem;
+      padding: .5rem .75rem;
+    }
+    #progress-log p { margin-bottom: .2rem; }
+
+    /* Results */
+    #results-section { display: none; }
+    .video-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: .75rem;
+    }
+    .video-item video {
+      width: 100%;
+      border-radius: .5rem;
+      background: #0f172a;
+    }
+    .video-item .dl-link {
+      display: inline-block;
+      margin-top: .5rem;
+      font-size: .85rem;
+      color: #38bdf8;
+      text-decoration: none;
+    }
+    .video-item .dl-link:hover { text-decoration: underline; }
+
+    /* Error */
+    .error-msg {
+      background: rgba(239,68,68,.1);
+      border: 1px solid #ef4444;
+      border-radius: .5rem;
+      padding: .75rem 1rem;
+      color: #fca5a5;
+      font-size: .875rem;
+      margin-top: .75rem;
+      display: none;
+    }
+
+    .badge {
+      display: inline-block;
+      background: rgba(56,189,248,.15);
+      color: #38bdf8;
+      font-size: .7rem;
+      padding: .15rem .45rem;
+      border-radius: 99px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🏠 AI Real Estate Video Generator</h1>
+  <p class="subtitle">Upload your property photos &rarr; one prompt &rarr; get a walkthrough video. Free &amp; client-side only.</p>
+
+  <!-- API Key -->
+  <div class="card">
+    <h2>🔑 Replicate API Key <span class="badge">free tier</span></h2>
+    <p style="font-size:.83rem;color:#64748b;margin-bottom:.75rem;">
+      Get your free key at <a href="https://replicate.com" target="_blank" rel="noopener" style="color:#38bdf8;">replicate.com</a> — stored only in your browser, sent only to Replicate's API.
+    </p>
+    <div class="input-row">
+      <input type="password" id="api-key" placeholder="r8_…" autocomplete="off" />
+    </div>
+    <div class="error-msg" id="key-error"></div>
+  </div>
+
+  <!-- Photo Upload -->
+  <div class="card">
+    <h2>📸 Property Photos</h2>
+    <div id="drop-zone" role="button" tabindex="0" aria-label="Upload photos">
+      <div class="icon">📂</div>
+      <p><strong>Click to browse</strong> or drag &amp; drop photos here</p>
+      <p style="margin-top:.4rem;">JPG, PNG, WEBP — upload as many as you want (10, 20, 50+)</p>
+    </div>
+    <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp" multiple hidden />
+    <div id="thumb-grid"></div>
+    <p id="photo-count"></p>
+    <div class="error-msg" id="photo-error"></div>
+  </div>
+
+  <!-- Prompt & Options -->
+  <div class="card">
+    <h2>✍️ Prompt <span style="font-size:.8rem;color:#64748b;font-weight:400;">(applies to all photos)</span></h2>
+    <textarea id="prompt" placeholder="Cinematic walkthrough of a modern luxury home, smooth camera movement, golden-hour lighting, professional real estate video"></textarea>
+    <div class="options-row">
+      <div class="option-group">
+        <label for="num-videos">Number of videos</label>
+        <select id="num-videos">
+          <option value="1">1 video (all photos in sequence)</option>
+          <option value="2" selected>2 videos (split photos evenly)</option>
+        </select>
+      </div>
+      <div class="option-group">
+        <label for="video-model">Video model</label>
+        <select id="video-model">
+          <option value="stability-ai/stable-video-diffusion:3f0457e4619daac51203dedb472816fd4af51f3149fa7a9e0b5ffcf1b8172438">Stable Video Diffusion (fastest)</option>
+          <option value="lucataco/animate-diff:beecf59c4aee8d81bf04f0381033dfa10dc16e845b4ae00d281e2fa377e48a9f">AnimateDiff (smoother)</option>
+        </select>
+      </div>
+    </div>
+    <div class="error-msg" id="prompt-error"></div>
+  </div>
+
+  <button id="generate-btn" disabled>Generate Video(s)</button>
+
+  <!-- Progress -->
+  <div class="card" id="progress-section">
+    <h2>⚙️ Generating…</h2>
+    <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-fill"></div></div>
+    <p id="progress-label" style="font-size:.85rem;color:#94a3b8;margin-bottom:.5rem;"></p>
+    <div id="progress-log"></div>
+  </div>
+
+  <!-- Results -->
+  <div class="card" id="results-section">
+    <h2>🎬 Your Videos</h2>
+    <div class="video-grid" id="video-grid"></div>
+  </div>
+</div>
+
+<script>
+// ──────────────────────────────────────────────────────
+//  State
+// ──────────────────────────────────────────────────────
+const photos = []; // { name, dataUrl } — EXIF-stripped blobs converted to data URLs
+
+// ──────────────────────────────────────────────────────
+//  EXIF / metadata stripping
+//  Re-draws image onto a plain canvas → export as JPEG.
+//  This removes ALL metadata (EXIF, GPS, ICC profile, etc.)
+// ──────────────────────────────────────────────────────
+function stripMetadata(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      URL.revokeObjectURL(objUrl);
+      canvas.toBlob(blob => {
+        if (!blob) { reject(new Error('Canvas export failed')); return; }
+        const reader = new FileReader();
+        reader.onload = e => resolve({ name: file.name, dataUrl: e.target.result });
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      }, 'image/jpeg', 0.92);
+    };
+    img.onerror = () => { URL.revokeObjectURL(objUrl); reject(new Error('Image load failed')); };
+    img.src = objUrl;
+  });
+}
+
+// ──────────────────────────────────────────────────────
+//  UI helpers
+// ──────────────────────────────────────────────────────
+const thumbGrid   = document.getElementById('thumb-grid');
+const photoCount  = document.getElementById('photo-count');
+const generateBtn = document.getElementById('generate-btn');
+
+function renderThumbs() {
+  thumbGrid.innerHTML = '';
+  photos.forEach((p, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'thumb-wrap';
+    const img = document.createElement('img');
+    img.src = p.dataUrl;
+    img.alt = p.name;
+    const btn = document.createElement('button');
+    btn.className = 'thumb-remove';
+    btn.textContent = '×';
+    btn.title = 'Remove';
+    btn.addEventListener('click', () => { photos.splice(i, 1); renderThumbs(); updateGenerateBtn(); });
+    wrap.append(img, btn);
+    thumbGrid.appendChild(wrap);
+  });
+  photoCount.textContent = photos.length > 0 ? `${photos.length} photo${photos.length !== 1 ? 's' : ''} ready` : '';
+}
+
+function updateGenerateBtn() {
+  const hasPhotos = photos.length > 0;
+  const hasKey    = document.getElementById('api-key').value.trim().length > 0;
+  generateBtn.disabled = !(hasPhotos && hasKey);
+}
+
+function showError(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function log(msg) {
+  const div = document.getElementById('progress-log');
+  const p = document.createElement('p');
+  p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  div.appendChild(p);
+  div.scrollTop = div.scrollHeight;
+}
+
+function setProgress(pct, label) {
+  document.getElementById('progress-fill').style.width = `${pct}%`;
+  document.getElementById('progress-label').textContent = label;
+}
+
+// ──────────────────────────────────────────────────────
+//  File input / drag-and-drop
+// ──────────────────────────────────────────────────────
+const dropZone  = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  handleFiles([...e.dataTransfer.files]);
+});
+fileInput.addEventListener('change', () => { handleFiles([...fileInput.files]); fileInput.value = ''; });
+
+async function handleFiles(files) {
+  showError('photo-error', '');
+  const imageFiles = files.filter(f => f.type.startsWith('image/'));
+  if (imageFiles.length === 0) { showError('photo-error', 'Please select image files (JPG, PNG, WEBP).'); return; }
+  log(`Processing ${imageFiles.length} new photo(s) — stripping metadata…`);
+  const results = await Promise.allSettled(imageFiles.map(stripMetadata));
+  let added = 0;
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') { photos.push(r.value); added++; }
+    else { log(`⚠️ Skipped ${imageFiles[i].name}: ${r.reason.message}`); }
+  });
+  log(`✅ Added ${added} photo(s). Total: ${photos.length}`);
+  renderThumbs();
+  updateGenerateBtn();
+}
+
+// ──────────────────────────────────────────────────────
+//  Replicate API helpers
+// ──────────────────────────────────────────────────────
+async function replicateRun(apiKey, modelVersion, input) {
+  // 1. Create prediction
+  const createRes = await fetch('https://api.replicate.com/v1/predictions', {
+    method: 'POST',
+    headers: { 'Authorization': `Token ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ version: modelVersion, input })
+  });
+  if (!createRes.ok) {
+    const err = await createRes.json().catch(() => ({}));
+    throw new Error(err.detail || `HTTP ${createRes.status}`);
+  }
+  const prediction = await createRes.json();
+
+  // 2. Poll until done
+  let result = prediction;
+  while (result.status !== 'succeeded' && result.status !== 'failed' && result.status !== 'canceled') {
+    await new Promise(r => setTimeout(r, 3000));
+    const pollRes = await fetch(`https://api.replicate.com/v1/predictions/${result.id}`, {
+      headers: { 'Authorization': `Token ${apiKey}` }
+    });
+    if (!pollRes.ok) throw new Error(`Poll failed: HTTP ${pollRes.status}`);
+    result = await pollRes.json();
+    log(`  Status: ${result.status}${result.logs ? ' — ' + result.logs.split('\n').filter(Boolean).slice(-1)[0] : ''}`);
+  }
+
+  if (result.status !== 'succeeded') throw new Error(`Prediction ${result.status}: ${result.error || 'unknown error'}`);
+  return result.output;
+}
+
+// ──────────────────────────────────────────────────────
+//  Batch helper: run multiple images through the model
+//  and assemble them into a single video URL (or array).
+//  SVD works per-frame image; AnimateDiff takes a list.
+// ──────────────────────────────────────────────────────
+async function generateVideoForBatch(apiKey, modelVersion, imageDataUrls, prompt, batchIndex, totalBatches) {
+  const isAnimateDiff = modelVersion.startsWith('lucataco/animate-diff');
+
+  if (isAnimateDiff) {
+    // AnimateDiff: pass all images as a list + prompt
+    log(`Batch ${batchIndex + 1}/${totalBatches}: Sending ${imageDataUrls.length} frames to AnimateDiff…`);
+    const output = await replicateRun(apiKey, modelVersion.split(':')[1] || modelVersion, {
+      prompt,
+      images: imageDataUrls,
+      num_frames: Math.min(imageDataUrls.length, 16),
+      fps: 8
+    });
+    return Array.isArray(output) ? output[0] : output;
+  } else {
+    // Stable Video Diffusion: one image → short clip; chain per first image of batch
+    // We use the first image as the "keyframe" and include prompt in the motion context.
+    log(`Batch ${batchIndex + 1}/${totalBatches}: Sending first frame to Stable Video Diffusion…`);
+    const output = await replicateRun(apiKey, modelVersion.split(':')[1] || modelVersion, {
+      input_image: imageDataUrls[0],
+      fps_id: 6,
+      motion_bucket_id: 127,
+      cond_aug: 0.02,
+      decoding_t: 7,
+      num_frames: 25
+    });
+    return Array.isArray(output) ? output[0] : output;
+  }
+}
+
+// ──────────────────────────────────────────────────────
+//  Main generate handler
+// ──────────────────────────────────────────────────────
+document.getElementById('api-key').addEventListener('input', updateGenerateBtn);
+
+generateBtn.addEventListener('click', async () => {
+  showError('key-error',    '');
+  showError('photo-error',  '');
+  showError('prompt-error', '');
+
+  const apiKey      = document.getElementById('api-key').value.trim();
+  const prompt      = document.getElementById('prompt').value.trim() || 'Cinematic real estate walkthrough, smooth camera movement, professional lighting';
+  const numVideos   = parseInt(document.getElementById('num-videos').value, 10);
+  const modelValue  = document.getElementById('video-model').value;
+
+  if (!apiKey) { showError('key-error', 'Please enter your Replicate API key.'); return; }
+  if (photos.length === 0) { showError('photo-error', 'Please upload at least one photo.'); return; }
+
+  // Build batches
+  const batches = [];
+  if (numVideos === 1) {
+    batches.push(photos.map(p => p.dataUrl));
+  } else {
+    const mid = Math.ceil(photos.length / 2);
+    batches.push(photos.slice(0, mid).map(p => p.dataUrl));
+    if (photos.slice(mid).length > 0) batches.push(photos.slice(mid).map(p => p.dataUrl));
+  }
+
+  // Show progress
+  const progressSection = document.getElementById('progress-section');
+  const resultsSection  = document.getElementById('results-section');
+  const videoGrid       = document.getElementById('video-grid');
+  progressSection.style.display = 'block';
+  resultsSection.style.display  = 'none';
+  videoGrid.innerHTML = '';
+  document.getElementById('progress-log').innerHTML = '';
+  generateBtn.disabled = true;
+  setProgress(0, 'Starting…');
+
+  const videoUrls = [];
+
+  try {
+    for (let i = 0; i < batches.length; i++) {
+      const pct = Math.round((i / batches.length) * 90);
+      setProgress(pct, `Generating video ${i + 1} of ${batches.length}…`);
+      log(`▶ Starting video ${i + 1}/${batches.length} with ${batches[i].length} photo(s)`);
+      const url = await generateVideoForBatch(apiKey, modelValue, batches[i], prompt, i, batches.length);
+      log(`✅ Video ${i + 1} ready: ${url}`);
+      videoUrls.push(url);
+      setProgress(Math.round(((i + 1) / batches.length) * 90), `Video ${i + 1} complete`);
+    }
+
+    setProgress(100, 'All done!');
+    log('🎉 All videos generated successfully!');
+
+    // Render results
+    videoUrls.forEach((url, i) => {
+      const item = document.createElement('div');
+      item.className = 'video-item';
+      const video = document.createElement('video');
+      video.src = url;
+      video.controls = true;
+      video.autoplay = false;
+      video.loop = true;
+
+      // Download: fetch into a blob URL so the browser can save the file
+      // (the `download` attribute is ignored for cross-origin URLs).
+      const link = document.createElement('a');
+      link.className = 'dl-link';
+      link.textContent = `⬇ Download video ${i + 1}`;
+      link.href = '#';
+      link.addEventListener('click', async e => {
+        e.preventDefault();
+        link.textContent = 'Downloading…';
+        try {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          a.download = `real-estate-video-${i + 1}.mp4`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+        } catch (err) {
+          // Fallback: open in new tab
+          window.open(url, '_blank', 'noopener');
+        } finally {
+          link.textContent = `⬇ Download video ${i + 1}`;
+        }
+      });
+
+      item.append(video, link);
+      videoGrid.appendChild(item);
+    });
+
+    resultsSection.style.display = 'block';
+    resultsSection.scrollIntoView({ behavior: 'smooth' });
+
+  } catch (err) {
+    log(`❌ Error: ${err.message}`);
+    setProgress(0, 'Failed — see log above');
+    showError('prompt-error', `Generation failed: ${err.message}`);
+  } finally {
+    generateBtn.disabled = false;
+    updateGenerateBtn();
+  }
+});
+</script>
+</body>
 </html>
+
