@@ -441,9 +441,11 @@ function maybeBase64VideoToBlobUrl(value) {
   const trimmed = value.trim();
   if (!trimmed) return '';
   if (trimmed.startsWith('data:video/')) return trimmed;
-  if (!/^[A-Za-z0-9+/=]+$/.test(trimmed)) return '';
+  if (!/^[A-Za-z0-9+/=\r\n]+$/.test(trimmed)) return '';
+  const compact = trimmed.replace(/\s+/g, '');
+  if (compact.length < 64 || compact.length % 4 !== 0) return '';
   try {
-    const bytes = atob(trimmed);
+    const bytes = atob(compact);
     const arr = new Uint8Array(bytes.length);
     for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
     return URL.createObjectURL(new Blob([arr], { type: 'video/mp4' }));
@@ -503,7 +505,7 @@ async function huggingFaceRun(apiKey, modelId, imageDataUrl, prompt) {
   };
 
   const safeModelPath = modelId.split('/').map(encodeURIComponent).join('/');
-  const endpoint = `https://router.huggingface.co/hf-inference/models/${safeModelPath}`;
+  const endpoint = `https://api-inference.huggingface.co/models/${safeModelPath}`;
   const maxAttempts = 4;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -531,7 +533,8 @@ async function huggingFaceRun(apiKey, modelId, imageDataUrl, prompt) {
     if (res.status === 503) {
       const body = await res.json().catch(() => ({}));
       const detail = safeErrorDetail(body);
-      const estimated = Math.ceil(Number(body.estimated_time) || 0);
+      const estimatedSeconds = Number(body.estimated_time);
+      const estimated = estimatedSeconds > 0 ? Math.ceil(estimatedSeconds) : 0;
       const waitSec = estimated > 0 ? estimated : Math.min(30, 5 * attempt);
       if (attempt === maxAttempts) throw new Error(detail || 'Selected model is warming up. Please retry shortly.');
       log(`⏳ Selected model is warming up. Retrying in ${waitSec}s…`);
